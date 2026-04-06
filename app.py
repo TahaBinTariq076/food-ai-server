@@ -24,25 +24,35 @@ FOOD_DB = {
     "waffles": {"calories":320,"protein":8,"carbs":40,"fat":15,"ingredients":["flour","milk","eggs"]}
 }
 
-# ================== LOAD MODELS ==================
-print("🔥 Loading models...")
-
-yolo = YOLO("best.pt")
-
+# ================== GLOBAL VARIABLES ==================
+yolo = None
+model = None
 CLASS_NAMES = list(FOOD_DB.keys())
 
-model = models.convnext_small(weights=None)
-model.classifier[2] = nn.Linear(
-    model.classifier[2].in_features, len(CLASS_NAMES)
-)
+# ================== LOAD MODELS LAZY ==================
+def load_models():
+    global yolo, model
 
-model.load_state_dict(
-    torch.load("ConvNeXt-Small_RC-Saliency.pt", map_location="cpu")
-)
+    if yolo is None:
+        print("🔥 Loading YOLO...")
+        yolo = YOLO("best.pt")
 
-model.eval()
+    if model is None:
+        print("🔥 Loading ConvNeXt...")
 
-print("✅ Models loaded!")
+        model_temp = models.convnext_small(weights=None)
+        model_temp.classifier[2] = nn.Linear(
+            model_temp.classifier[2].in_features, len(CLASS_NAMES)
+        )
+
+        model_temp.load_state_dict(
+            torch.load("ConvNeXt-Small_RC-Saliency.pt", map_location="cpu")
+        )
+
+        model_temp.eval()
+        model = model_temp
+
+    print("✅ Models ready")
 
 # ================== TRANSFORM ==================
 transform = T.Compose([
@@ -56,11 +66,14 @@ transform = T.Compose([
 # ================== ROOT ==================
 @app.get("/")
 def home():
-    return {"message": "Server is running ✅"}
+    return {"message": "Food AI Server Running ✅"}
 
 # ================== PREDICT ==================
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
+
+    load_models()   # 🔥 CRITICAL FIX
+
     try:
         contents = await file.read()
 
