@@ -24,12 +24,12 @@ FOOD_DB = {
     "waffles": {"calories":320,"protein":8,"carbs":40,"fat":15,"ingredients":["flour","milk","eggs"]}
 }
 
-# ================== GLOBAL VARIABLES ==================
+# ================== GLOBAL ==================
 yolo = None
 model = None
 CLASS_NAMES = list(FOOD_DB.keys())
 
-# ================== LOAD MODELS LAZY ==================
+# ================== LOAD MODELS ==================
 def load_models():
     global yolo, model
 
@@ -39,20 +39,17 @@ def load_models():
 
     if model is None:
         print("🔥 Loading ConvNeXt...")
-
-        model_temp = models.convnext_small(weights=None)
-        model_temp.classifier[2] = nn.Linear(
-            model_temp.classifier[2].in_features, len(CLASS_NAMES)
+        m = models.convnext_small(weights=None)
+        m.classifier[2] = nn.Linear(
+            m.classifier[2].in_features, len(CLASS_NAMES)
         )
-
-        model_temp.load_state_dict(
+        m.load_state_dict(
             torch.load("ConvNeXt-Small_RC-Saliency.pt", map_location="cpu")
         )
+        m.eval()
+        model = m
 
-        model_temp.eval()
-        model = model_temp
-
-    print("✅ Models ready")
+    print("✅ Models Ready")
 
 # ================== TRANSFORM ==================
 transform = T.Compose([
@@ -66,13 +63,13 @@ transform = T.Compose([
 # ================== ROOT ==================
 @app.get("/")
 def home():
-    return {"message": "Food AI Server Running ✅"}
+    return {"status": "NEW SERVER RUNNING ✅"}
 
 # ================== PREDICT ==================
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
 
-    load_models()   # 🔥 CRITICAL FIX
+    load_models()
 
     try:
         contents = await file.read()
@@ -85,16 +82,21 @@ async def predict(file: UploadFile = File(...)):
         if img is None:
             return JSONResponse({"error": "Invalid image"})
 
+        # YOLO Detection
         results = yolo(img, conf=0.5)[0]
 
         if not results.boxes:
             return JSONResponse({"result": "No food detected"})
 
+        # Crop first detected box
         box = results.boxes[0]
         x1, y1, x2, y2 = map(int, box.xyxy[0])
-
         crop = img[y1:y2, x1:x2]
 
+        if crop is None or crop.size == 0:
+            return JSONResponse({"error": "Invalid crop"})
+
+        # Classification
         tensor = transform(crop).unsqueeze(0)
 
         with torch.no_grad():
@@ -106,6 +108,7 @@ async def predict(file: UploadFile = File(...)):
         food_name = CLASS_NAMES[idx.item()]
         info = FOOD_DB.get(food_name, {})
 
+        # ✅ FINAL RESPONSE (FULL DATA)
         return JSONResponse({
             "food": food_name,
             "confidence": float(conf.item()),
@@ -117,4 +120,5 @@ async def predict(file: UploadFile = File(...)):
         })
 
     except Exception as e:
+        print("ERROR:", str(e))
         return JSONResponse({"error": str(e)})
