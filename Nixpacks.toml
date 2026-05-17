@@ -1,5 +1,0 @@
-[phases.setup]
-nixPkgs = ["libxcb"]
-
-[phases.install]
-aptPkgs = ["libxcb1", "libxcb-shm0", "libxcb-xfixes0", "libxcb-randr0", "libxcb-shape0", "libxcb-keysyms1", "libxcb-xinerama0", "libxcb-icccm4", "libxcb-image0", "libxcb-render-util0", "libxcb-xkb1"]
